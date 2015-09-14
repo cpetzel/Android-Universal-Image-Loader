@@ -15,8 +15,15 @@
  *******************************************************************************/
 package com.nostra13.universalimageloader.core;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
+
 import android.graphics.Bitmap;
 import android.os.Handler;
+
 import com.nostra13.universalimageloader.core.assist.FailReason;
 import com.nostra13.universalimageloader.core.assist.FailReason.FailType;
 import com.nostra13.universalimageloader.core.assist.ImageScaleType;
@@ -32,12 +39,6 @@ import com.nostra13.universalimageloader.core.listener.ImageLoadingListener;
 import com.nostra13.universalimageloader.core.listener.ImageLoadingProgressListener;
 import com.nostra13.universalimageloader.utils.IoUtils;
 import com.nostra13.universalimageloader.utils.L;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Presents load'n'display image task. Used to load image from Internet or file system, decode it to {@link Bitmap}, and
@@ -214,7 +215,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 	private Bitmap tryLoadBitmap() throws TaskCancelledException {
 		Bitmap bitmap = null;
 		try {
-			File imageFile = configuration.diskCache.get(uri);
+			File imageFile = configuration.diskCache.get(memoryCacheKey);
 			if (imageFile != null && imageFile.exists() && imageFile.length() > 0) {
 				L.d(LOG_LOAD_IMAGE_FROM_DISK_CACHE, memoryCacheKey);
 				loadedFrom = LoadedFrom.DISC_CACHE;
@@ -228,7 +229,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 
 				String imageUriForDecoding = uri;
 				if (options.isCacheOnDisk() && tryCacheImageOnDisk()) {
-					imageFile = configuration.diskCache.get(uri);
+					imageFile = configuration.diskCache.get(memoryCacheKey);
 					if (imageFile != null) {
 						imageUriForDecoding = Scheme.FILE.wrap(imageFile.getAbsolutePath());
 					}
@@ -261,7 +262,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 	private Bitmap decodeImage(String imageUri) throws IOException {
 		ViewScaleType viewScaleType = imageAware.getScaleType();
 		ImageDecodingInfo decodingInfo = new ImageDecodingInfo(memoryCacheKey, imageUri, uri, targetSize, viewScaleType,
-				getDownloader(), options);
+			getDownloader(), options);
 		return decoder.decode(decodingInfo);
 	}
 
@@ -294,7 +295,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 			return false;
 		} else {
 			try {
-				return configuration.diskCache.save(uri, is, this);
+				return configuration.diskCache.save(memoryCacheKey, is, this);
 			} finally {
 				IoUtils.closeSilently(is);
 			}
@@ -305,14 +306,14 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 	private boolean resizeAndSaveImage(int maxWidth, int maxHeight) throws IOException {
 		// Decode image file, compress and re-save it
 		boolean saved = false;
-		File targetFile = configuration.diskCache.get(uri);
+		File targetFile = configuration.diskCache.get(memoryCacheKey);
 		if (targetFile != null && targetFile.exists()) {
 			ImageSize targetImageSize = new ImageSize(maxWidth, maxHeight);
 			DisplayImageOptions specialOptions = new DisplayImageOptions.Builder().cloneFrom(options)
-					.imageScaleType(ImageScaleType.IN_SAMPLE_INT).build();
+				.imageScaleType(ImageScaleType.IN_SAMPLE_INT).build();
 			ImageDecodingInfo decodingInfo = new ImageDecodingInfo(memoryCacheKey,
-					Scheme.FILE.wrap(targetFile.getAbsolutePath()), uri, targetImageSize, ViewScaleType.FIT_INSIDE,
-					getDownloader(), specialOptions);
+				Scheme.FILE.wrap(targetFile.getAbsolutePath()), uri, targetImageSize, ViewScaleType.FIT_INSIDE,
+				getDownloader(), specialOptions);
 			Bitmap bmp = decoder.decode(decodingInfo);
 			if (bmp != null && configuration.processorForDiskCache != null) {
 				L.d(LOG_PROCESS_IMAGE_BEFORE_CACHE_ON_DISK, memoryCacheKey);
@@ -322,7 +323,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 				}
 			}
 			if (bmp != null) {
-				saved = configuration.diskCache.save(uri, bmp);
+				saved = configuration.diskCache.save(memoryCacheKey, bmp);
 				bmp.recycle();
 			}
 		}
